@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+Frontend/node_modules/
+Backend/venv/
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+Frontend/.env
+Backend/.env
+!.env.example
+!Frontend/.env.example
+!Backend/.env.example
+
+# Next.js
+Frontend/.next/
+Frontend/out/
+
+# Prisma SQLite (local)
+Frontend/prisma/dev.db
+Frontend/prisma/dev.db-journal
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.Python
+
+# Uploads & generated assets
+Backend/uploads/
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Build / logs
+*.log
+npm-debug.log*
+Frontend/*.tsbuildinfo
+next-env.d.ts
+
+# Cursor
+.cursor/

@@ -27,18 +27,18 @@ Copy `.env.example` to `.env` and adjust as needed.
 
 ## Plans (in-memory)
 
-| Plan | Daily mints | HD download |
-|------|-------------|-------------|
-| Free | 3 | No (standard ~480p watermarked only) |
-| Starter ($2) | 5 | No |
-| Pro ($5) | Unlimited | Yes, full resolution, no watermark |
+| Plan | Daily images | HD download |
+|------|--------------|-------------|
+| Free | 1 | No (standard ~480p watermarked only) |
+| Starter ($2/day) | 5 | No |
+| Pro ($5/month) | Unlimited | Yes, full resolution, no watermark |
 
 Send the user email on authenticated requests: header `X-User-Email`.
 
 ## API
 
 - `POST /api/users/register` — `{ email, name?, provider? }` after Google OAuth (creates free account)
-- `GET /api/users/me?email=` — plan and daily mint usage
+- `GET /api/users/me?email=` — plan and daily image usage
 - `POST /api/billing/webhook` — Stripe webhook (activates plan after payment)
 - `POST /api/billing/checkout` — `{ plan, email }` → Stripe or mock URL
 - `POST /api/billing/activate` — `{ plan, email }` — activate after mock/Stripe success

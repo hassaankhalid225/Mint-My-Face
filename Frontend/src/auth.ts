@@ -3,21 +3,44 @@ import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { createAccessToken } from "@/lib/jwt";
 import { verifyPassword } from "@/lib/password";
+import { resolveEffectivePlan } from "@/lib/plan-utils";
 import { findUserByEmail, upsertGoogleUser } from "@/lib/users";
 
-const googleClientId = process.env.GOOGLE_CLIENT_ID;
-const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
-const authSecret = process.env.AUTH_SECRET;
+const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim();
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+const authSecret = process.env.AUTH_SECRET?.trim();
+
+const googleProvider =
+  googleClientId && googleClientSecret
+    ? Google({
+        clientId: googleClientId,
+        clientSecret: googleClientSecret,
+        // Explicit endpoints — avoids OIDC discovery fetch (often fails as "Configuration")
+        authorization: {
+          url: "https://accounts.google.com/o/oauth2/v2/auth",
+          params: {
+            prompt: "select_account",
+            scope: "openid email profile",
+            response_type: "code",
+          },
+        },
+        token: "https://oauth2.googleapis.com/token",
+        userinfo: "https://openidconnect.googleapis.com/v1/userinfo",
+      })
+    : null;
+
+/** Stay signed in ~30 days (browser session cookie). */
+const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   secret: authSecret,
-  session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 7 },
+  session: {
+    strategy: "jwt",
+    maxAge: SESSION_MAX_AGE,
+    updateAge: 60 * 60 * 24,
+  },
   providers: [
-    Google({
-      clientId: googleClientId,
-      clientSecret: googleClientSecret,
-      authorization: { params: { prompt: "select_account" } },
-    }),
+    ...(googleProvider ? [googleProvider] : []),
     Credentials({
       id: "credentials",
       name: "Email",
@@ -76,11 +99,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if ("plan" in user && user.plan) token.plan = user.plan as string;
       }
 
-      if (account?.provider === "google" && token.email) {
+      if (token.email) {
         const dbUser = await findUserByEmail(token.email as string);
         if (dbUser) {
           token.sub = dbUser.id;
-          token.plan = dbUser.plan;
+          token.plan = resolveEffectivePlan(dbUser.plan, dbUser.planExpiresAt);
         }
       }
 

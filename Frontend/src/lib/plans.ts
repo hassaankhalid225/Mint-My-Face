@@ -8,7 +8,8 @@ export interface Plan {
   period: string;
   description: string;
   features: string[];
-  dailyMintLimit: number | null;
+  /** Max images per calendar day; null = unlimited while plan is active */
+  dailyImageLimit: number | null;
   hdDownload: boolean;
   printQuality: boolean;
   featured?: boolean;
@@ -21,14 +22,14 @@ export const PLANS: Plan[] = [
     priceLabel: "$0",
     priceCents: 0,
     period: "forever",
-    description: "Try Mint My Face with watermarked previews.",
+    description: "One custom dollar-bill image per day.",
     features: [
+      "1 image per day",
       "Watermarked preview download",
       "Standard quality PNG (~480p)",
       "Full editor access",
-      "3 mints per day",
     ],
-    dailyMintLimit: 3,
+    dailyImageLimit: 1,
     hdDownload: false,
     printQuality: false,
   },
@@ -38,14 +39,14 @@ export const PLANS: Plan[] = [
     priceLabel: "$2",
     priceCents: 200,
     period: "per day",
-    description: "Create more notes every day.",
+    description: "Five custom dollar-bill images per day.",
     features: [
-      "5 image mints per day",
+      "5 images per day",
       "Watermarked downloads",
-      "Standard quality PNG",
-      "Email support",
+      "Standard quality PNG (~480p)",
+      "Active right after checkout",
     ],
-    dailyMintLimit: 5,
+    dailyImageLimit: 5,
     hdDownload: false,
     printQuality: false,
   },
@@ -55,15 +56,14 @@ export const PLANS: Plan[] = [
     priceLabel: "$5",
     priceCents: 500,
     period: "per month",
-    description: "Unlimited mints and print-ready HD.",
+    description: "Unlimited images and print-ready HD every month.",
     features: [
-      "Unlimited image mints",
-      "Unlock full HD — no watermark",
+      "Unlimited images",
+      "Full HD download — no watermark",
       "Print-quality PNG export",
       "Priority processing",
-      "Purchase tracking in your account",
     ],
-    dailyMintLimit: null,
+    dailyImageLimit: null,
     hdDownload: true,
     printQuality: true,
     featured: true,

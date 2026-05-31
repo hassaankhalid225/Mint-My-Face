@@ -9,7 +9,7 @@ import { PLANS } from "@/lib/plans";
 import { pageMetadata, SITE_NAME, SITE_URL } from "@/lib/seo";
 
 const PRICING_DESCRIPTION =
-  "Choose Free, Starter ($2/day), or Pro ($5/month) for custom dollar bills — daily mint limits, watermarked previews, and full HD print downloads.";
+  "Free: 1 image per day. Starter: $2/day for 5 images. Pro: $5/month with unlimited images and HD downloads.";
 
 export const metadata = pageMetadata({
   title: "Pricing & Plans",
@@ -40,7 +40,7 @@ export default function PricingPage() {
             <p className="type-caption-uppercase section-head__label">Pricing</p>
             <h1 className="type-display-lg">Choose your plan</h1>
             <p className="pricing-page__intro type-body-sm">
-              Start free. Upgrade when you need more daily mints or print-ready HD without
+              Start free. Upgrade when you need more daily images or print-ready HD without
               watermark.
             </p>
           </header>

@@ -1,10 +1,10 @@
-"""User plans, daily limits, and Stripe checkout (optional)."""
+"""User plans, daily image limits, plan expiry, and Stripe checkout."""
 
 from __future__ import annotations
 
 import os
 import uuid
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Literal
 
 PlanId = Literal["free", "starter", "pro"]
@@ -14,11 +14,50 @@ PLAN_PRICES_CENTS = {
     "pro": 500,
 }
 
+# Max images per calendar day (None = unlimited while paid plan is active)
+DAILY_IMAGE_LIMITS: dict[PlanId, int | None] = {
+    "free": 1,
+    "starter": 5,
+    "pro": None,
+}
+
 users_db: dict[str, dict] = {}
 
 
 def _today() -> str:
     return date.today().isoformat()
+
+
+def _now() -> datetime:
+    return datetime.utcnow()
+
+
+def compute_plan_expires_at(plan: PlanId, from_dt: datetime | None = None) -> datetime | None:
+    start = from_dt or _now()
+    if plan == "starter":
+        return start + timedelta(hours=24)
+    if plan == "pro":
+        return start + timedelta(days=30)
+    return None
+
+
+def _parse_expires(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
+def effective_plan(user: dict) -> PlanId:
+    plan: PlanId = user.get("plan", "free")
+    if plan not in ("starter", "pro"):
+        return "free"
+    expires = _parse_expires(user.get("plan_expires_at"))
+    if expires and _now() > expires:
+        return "free"
+    return plan
 
 
 def get_or_create_user(email: str) -> dict:
@@ -27,6 +66,7 @@ def get_or_create_user(email: str) -> dict:
         users_db[key] = {
             "email": key,
             "plan": "free",
+            "plan_expires_at": None,
             "mint_day": _today(),
             "mint_count": 0,
             "name": None,
@@ -41,7 +81,6 @@ def register_user(
     name: str | None = None,
     provider: str = "google",
 ) -> tuple[dict, bool]:
-    """Create account on first Google sign-in; return (user, is_new)."""
     key = email.lower().strip()
     if key in users_db:
         if name and not users_db[key].get("name"):
@@ -53,6 +92,7 @@ def register_user(
         "name": name,
         "provider": provider,
         "plan": "free",
+        "plan_expires_at": None,
         "mint_day": _today(),
         "mint_count": 0,
         "created_at": _today(),
@@ -62,10 +102,11 @@ def register_user(
 
 def get_user_plan(email: str) -> PlanId:
     user = get_or_create_user(email)
-    return user.get("plan", "free")
+    return effective_plan(user)
 
 
 def can_mint(email: str | None) -> tuple[bool, str]:
+    """Check if user can save another image today (legacy name: can_mint)."""
     if not email:
         return True, "anonymous"
 
@@ -74,9 +115,8 @@ def can_mint(email: str | None) -> tuple[bool, str]:
         user["mint_day"] = _today()
         user["mint_count"] = 0
 
-    plan: PlanId = user.get("plan", "free")
-    limits = {"free": 3, "starter": 5, "pro": None}
-    limit = limits.get(plan)
+    plan = effective_plan(user)
+    limit = DAILY_IMAGE_LIMITS.get(plan)
 
     if limit is None:
         return True, plan
@@ -100,13 +140,16 @@ def record_mint(email: str | None) -> None:
 def set_user_plan(email: str, plan: PlanId) -> dict:
     user = get_or_create_user(email)
     user["plan"] = plan
+    expires = compute_plan_expires_at(plan)
+    user["plan_expires_at"] = expires.isoformat() if expires else None
     return user
 
 
 def user_has_hd(email: str | None) -> bool:
     if not email:
         return False
-    return get_user_plan(email) == "pro"
+    user = get_or_create_user(email)
+    return effective_plan(user) == "pro"
 
 
 def _stripe_price_id(plan: str) -> str:
@@ -125,11 +168,11 @@ def create_stripe_checkout_url(plan: PlanId, email: str, base_url: str) -> str:
 
         stripe.api_key = secret
         price_id = _stripe_price_id(plan)
-        is_subscription = plan == "pro" and bool(price_id)
+        is_subscription = False
 
         if price_id:
             line_items = [{"price": price_id, "quantity": 1}]
-            mode = "subscription" if is_subscription else "payment"
+            mode = "payment"
         else:
             mode = "payment"
             line_items = [
@@ -157,7 +200,6 @@ def create_stripe_checkout_url(plan: PlanId, email: str, base_url: str) -> str:
 
 
 def apply_stripe_checkout_completed(session: dict) -> bool:
-    """Activate plan from Stripe checkout.session.completed metadata."""
     metadata = session.get("metadata") or {}
     email = (metadata.get("email") or "").lower().strip()
     plan = (metadata.get("plan") or "").lower().strip()

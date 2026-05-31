@@ -2,46 +2,24 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import SiteLogo from "@/components/SiteLogo";
+import ProfileMenu from "@/components/ProfileMenu";
+import { useSession } from "next-auth/react";
 
 type SiteNavProps = {
   priorityLogo?: boolean;
-  variant?: "default" | "editor" | "auth";
+  variant?: "default" | "editor";
 };
-
-function userInitial(name?: string | null, email?: string | null): string {
-  const source = (name || email || "?").trim();
-  return source.charAt(0).toUpperCase();
-}
 
 export default function SiteNav({ priorityLogo, variant }: SiteNavProps) {
   const pathname = usePathname();
-  const isAuthPage =
-    variant === "auth" || pathname === "/login" || pathname === "/signup";
   const isEditorPage = variant === "editor" || pathname === "/editor";
-  const { data: session, status } = useSession();
-  const isAuthed = status === "authenticated" && !!session?.user;
-  const displayName = session?.user?.name ?? session?.user?.email ?? "";
+  const onLoginOrSignup = pathname === "/login" || pathname === "/signup";
+  const { status } = useSession();
+  const isAuthed = status === "authenticated";
 
-  const authBlock = isAuthed ? (
-    <div className="top-nav__identity">
-      <span className="top-nav__avatar" aria-hidden>
-        {userInitial(session?.user?.name, session?.user?.email)}
-      </span>
-      <span className="top-nav__user" title={session?.user?.email ?? undefined}>
-        {displayName}
-      </span>
-      <button
-        type="button"
-        className="btn btn-tertiary top-nav__btn"
-        onClick={() => signOut({ callbackUrl: "/" })}
-      >
-        Sign out
-      </button>
-    </div>
-  ) : (
+  const guestAuth = onLoginOrSignup ? null : (
     <div className="top-nav__auth-guest">
       <Link href="/login" className="top-nav__link">
         Log in
@@ -53,18 +31,7 @@ export default function SiteNav({ priorityLogo, variant }: SiteNavProps) {
     </div>
   );
 
-  if (isAuthPage) {
-    return (
-      <nav className="top-nav top-nav--auth-minimal" aria-label="Authentication">
-        <div className="container-main top-nav__inner top-nav__inner--auth-minimal">
-          <SiteLogo size="md" priority={priorityLogo} />
-          <Link href="/" className="top-nav__link">
-            Home
-          </Link>
-        </div>
-      </nav>
-    );
-  }
+  const authBlock = isAuthed ? <ProfileMenu compact={isEditorPage} /> : guestAuth;
 
   if (isEditorPage) {
     return (
@@ -107,14 +74,7 @@ export default function SiteNav({ priorityLogo, variant }: SiteNavProps) {
               Editor
             </Link>
           </div>
-          <div className="top-nav__actions">
-            {authBlock}
-            {isAuthed && (
-              <Link href="/editor" className="btn btn-secondary top-nav__btn top-nav__btn--cta">
-                Start creating
-              </Link>
-            )}
-          </div>
+          <div className="top-nav__actions">{authBlock}</div>
         </div>
       </div>
     </nav>

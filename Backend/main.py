@@ -14,10 +14,12 @@ from pydantic import BaseModel
 from PIL import Image
 
 from billing import (
+    DAILY_IMAGE_LIMITS,
     PLAN_PRICES_CENTS,
     apply_stripe_checkout_completed,
     can_mint,
     create_stripe_checkout_url,
+    effective_plan,
     get_or_create_user,
     record_mint,
     register_user,
@@ -149,17 +151,16 @@ async def register_user_endpoint(body: UserRegisterRequest):
 
 
 @app.get("/api/users/me", response_model=UserPlanResponse)
-async def get_user_plan(email: str):
+async def get_user_plan_endpoint(email: str):
     if not email:
         raise HTTPException(status_code=400, detail="Email required")
     user = get_or_create_user(email)
-    plan = user.get("plan", "free")
-    limits = {"free": 3, "starter": 5, "pro": None}
+    plan = effective_plan(user)
     return {
         "email": user["email"],
         "plan": plan,
         "mint_count_today": user.get("mint_count", 0),
-        "daily_limit": limits.get(plan),
+        "daily_limit": DAILY_IMAGE_LIMITS.get(plan),
         "hd_access": user_has_hd(email),
     }
 
@@ -227,7 +228,7 @@ async def save_design(
         if not allowed:
             raise HTTPException(
                 status_code=403,
-                detail=f"Daily mint limit reached for {plan} plan. Upgrade at /pricing",
+                detail=f"Daily image limit reached for {plan} plan. Upgrade at /pricing",
             )
 
     if not image.content_type or not image.content_type.startswith("image/"):

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import AuthEnvNotice from "@/components/AuthEnvNotice";
 import EmailLoginForm from "@/components/EmailLoginForm";
 import GoogleAuthButton from "@/components/GoogleAuthButton";
 import JsonLd from "@/components/JsonLd";
@@ -31,7 +30,15 @@ export default async function LoginPage({
   }
 
   const callbackUrl = params.callbackUrl ?? "/editor";
-  const authError = params.error;
+
+  if (params.error) {
+    const q =
+      callbackUrl !== "/editor"
+        ? `?callbackUrl=${encodeURIComponent(callbackUrl)}`
+        : "";
+    redirect(`/login${q}`);
+  }
+
   const signupHref = `/signup${callbackUrl !== "/editor" ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ""}`;
 
   return (
@@ -45,21 +52,13 @@ export default async function LoginPage({
           url: `${SITE_URL}/login`,
         }}
       />
-      <SiteNav variant="auth" />
+      <SiteNav />
       <main className="auth-layout" id="main-content">
         <div className="container-main auth-layout__container">
           <article className="auth-card auth-card--minimal" aria-labelledby="login-heading">
             <Link href="/" className="auth-card__back">
               ← Back to home
             </Link>
-
-            <AuthEnvNotice />
-
-            {authError && (
-              <p className="auth-card__error" role="alert">
-                Sign-in failed ({authError}). Check your settings in Frontend/.env.
-              </p>
-            )}
 
             <header className="auth-card__header">
               <h1 id="login-heading" className="auth-card__title">

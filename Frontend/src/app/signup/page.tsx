@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import AuthEnvNotice from "@/components/AuthEnvNotice";
 import EmailSignupForm from "@/components/EmailSignupForm";
 import GoogleAuthButton from "@/components/GoogleAuthButton";
 import JsonLd from "@/components/JsonLd";
@@ -44,15 +43,13 @@ export default async function SignupPage({
           url: `${SITE_URL}/signup`,
         }}
       />
-      <SiteNav variant="auth" />
+      <SiteNav />
       <main className="auth-layout" id="main-content">
         <div className="container-main auth-layout__container">
           <article className="auth-card auth-card--minimal" aria-labelledby="signup-heading">
             <Link href="/" className="auth-card__back">
               ← Back to home
             </Link>
-
-            <AuthEnvNotice />
 
             <header className="auth-card__header">
               <h1 id="signup-heading" className="auth-card__title">

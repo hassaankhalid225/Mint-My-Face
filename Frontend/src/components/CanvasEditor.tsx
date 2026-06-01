@@ -39,11 +39,13 @@ import {
   getSelectedLayerId,
   reorderTextLayers,
   ensureLayerId,
+  registerLayerId,
   type LayerRow,
 } from "@/lib/editor-layers";
 import {
   ApiError,
   saveDesign,
+  uploadCanvasSnapshot,
   checkApiHealth,
   type DesignCreateResult,
 } from "@/lib/api";
@@ -72,6 +74,19 @@ if (fabric.FabricObject.ownDefaults) {
 
 /** Transparent portrait hole on the template (fractions of note size). */
 const PORTRAIT = { cx: 0.5, cy: 0.5, w: 0.22, h: 0.62 } as const;
+
+/** Default text slots on the dollar-note template (fractions of canvas size). */
+const NOTE_TEXT_NAME = { left: 0.088, top: 0.492, width: 0.158 } as const;
+const NOTE_TEXT_BODY = { left: 0.058, top: 0.668, width: 0.3 } as const;
+/** Previous default slots — used to migrate existing sessions. */
+const LEGACY_NOTE_TEXT_NAME_SLOTS = [
+  { left: 0.078, top: 0.2, width: 0.2 },
+  { left: 0.108, top: 0.318, width: 0.168 },
+] as const;
+const DEFAULT_NAME_LAYER_ID = "text-name";
+const DEFAULT_BODY_LAYER_ID = "text-body";
+const NOTE_TEXT_DEFAULT_COLOR = "#41413e";
+const NOTE_TEXT_DEFAULT_SIZE = 25;
 
 type PhotoFilters = {
   grayscale: number;
@@ -129,6 +144,84 @@ function disableCanvasDragSelection(fc: fabric.Canvas) {
   fc.selection = false;
 }
 
+function applyNoteTextSlot(
+  text: fabric.IText,
+  slot: { left: number; top: number; width: number },
+  w: number,
+  h: number,
+) {
+  text.set({
+    left: w * slot.left,
+    top: h * slot.top,
+    width: w * slot.width,
+  });
+  text.setCoords();
+}
+
+function textNearSlot(
+  text: fabric.IText,
+  slot: { left: number; top: number; width: number },
+  w: number,
+  h: number,
+  tolerance = 0.02,
+) {
+  return (
+    Math.abs(text.left! - w * slot.left) <= w * tolerance &&
+    Math.abs(text.top! - h * slot.top) <= h * tolerance
+  );
+}
+
+/** Reposition default name text if it is still at a known legacy slot. */
+function migrateDefaultNameSlot(fc: fabric.Canvas) {
+  const w = fc.getWidth();
+  const h = fc.getHeight();
+  const nameText = findTextByLayerId(fc, DEFAULT_NAME_LAYER_ID);
+  if (!nameText) return;
+  for (const slot of LEGACY_NOTE_TEXT_NAME_SLOTS) {
+    if (textNearSlot(nameText, slot, w, h)) {
+      applyNoteTextSlot(nameText, NOTE_TEXT_NAME, w, h);
+      return;
+    }
+  }
+}
+
+function seedDefaultNoteText(fc: fabric.Canvas) {
+  if (fc.getObjects().some((o) => o.type === "i-text")) return;
+
+  const w = fc.getWidth();
+  const h = fc.getHeight();
+
+  const nameText = new fabric.IText("Your name", {
+    left: w * NOTE_TEXT_NAME.left,
+    top: h * NOTE_TEXT_NAME.top,
+    originX: "left",
+    originY: "top",
+    fontFamily: TEXT_FONTS[0].value,
+    fontSize: NOTE_TEXT_DEFAULT_SIZE,
+    fontWeight: "bold",
+    fill: NOTE_TEXT_DEFAULT_COLOR,
+    width: w * NOTE_TEXT_NAME.width,
+  });
+  applyTextControlDefaults(nameText);
+  registerLayerId(nameText, DEFAULT_NAME_LAYER_ID);
+
+  const bodyText = new fabric.IText("", {
+    left: w * NOTE_TEXT_BODY.left,
+    top: h * NOTE_TEXT_BODY.top,
+    originX: "left",
+    originY: "top",
+    fontFamily: TEXT_FONTS[0].value,
+    fontSize: NOTE_TEXT_DEFAULT_SIZE,
+    fill: NOTE_TEXT_DEFAULT_COLOR,
+    width: w * NOTE_TEXT_BODY.width,
+    lineHeight: 1.3,
+  });
+  applyTextControlDefaults(bodyText);
+  registerLayerId(bodyText, DEFAULT_BODY_LAYER_ID);
+
+  fc.add(nameText, bodyText);
+}
+
 function normalizeTextScale(text: fabric.IText): boolean {
   const sx = text.scaleX ?? 1;
   const sy = text.scaleY ?? 1;
@@ -145,6 +238,7 @@ function normalizeTextScale(text: fabric.IText): boolean {
 }
 
 const TEXT_COLOR_PRESETS = [
+  "#41413e",
   "#1a4a2a",
   "#0a2a12",
   "#2b5f38",
@@ -251,9 +345,9 @@ export default function CanvasEditor() {
   const [history, setHistory] = useState<EditorHistory>(() => createHistory());
   const [canUndoState, setCanUndoState] = useState(false);
   const [canRedoState, setCanRedoState] = useState(false);
-  const [selectedTextFill, setSelectedTextFill] = useState("#1a4a2a");
+  const [selectedTextFill, setSelectedTextFill] = useState(NOTE_TEXT_DEFAULT_COLOR);
   const [selectedTextFont, setSelectedTextFont] = useState<string>(TEXT_FONTS[0].value);
-  const [selectedTextSize, setSelectedTextSize] = useState(28);
+  const [selectedTextSize, setSelectedTextSize] = useState(NOTE_TEXT_DEFAULT_SIZE);
   const [hasTextSelection, setHasTextSelection] = useState(false);
   const [layers, setLayers] = useState<LayerRow[]>([]);
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
@@ -261,7 +355,7 @@ export default function CanvasEditor() {
   const historyRef = useRef(history);
   const restoringHistoryRef = useRef(false);
   const historyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  historyRef.current = history;
+  const canvasSaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [photoSrc, setPhotoSrc] = useState<string | null>(null);
   const [photoPos, setPhotoPos] = useState<{ x: number; y: number }>({
@@ -278,11 +372,7 @@ export default function CanvasEditor() {
   const photoSrcRef = useRef(photoSrc);
   const photoPosRef = useRef(photoPos);
   const photoScaleRef = useRef(photoScale);
-  photoSrcRef.current = photoSrc;
-  photoPosRef.current = photoPos;
-  photoScaleRef.current = photoScale;
   const photoActiveRef = useRef(photoActive);
-  photoActiveRef.current = photoActive;
 
   const [filters, setFilters] = useState<PhotoFilters>({ ...DEFAULT_FILTERS });
 
@@ -296,6 +386,69 @@ export default function CanvasEditor() {
     setToast({ msg, type });
     if (type !== "loading") setTimeout(() => setToast(null), duration);
   }, []);
+
+  const captureComposeSnapshot = useCallback(async (): Promise<Blob | null> => {
+    if (!composeRef.current) return null;
+
+    fabricRef.current?.discardActiveObject();
+    fabricRef.current?.requestRenderAll();
+
+    const hideSelectors = [".note-compose__photo-hit", ".note-compose__photo-handles"];
+    const hidden: { el: HTMLElement; visibility: string }[] = [];
+    for (const sel of hideSelectors) {
+      const el = composeRef.current.querySelector(sel);
+      if (el instanceof HTMLElement) {
+        hidden.push({ el, visibility: el.style.visibility });
+        el.style.visibility = "hidden";
+      }
+    }
+
+    await new Promise((r) => setTimeout(r, 80));
+
+    try {
+      const snapshot = await html2canvas(composeRef.current, {
+        backgroundColor: PAPER_BG,
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        allowTaint: true,
+      });
+      const dataURL = snapshot.toDataURL("image/png");
+      const res = await fetch(dataURL);
+      return await res.blob();
+    } finally {
+      for (const { el, visibility } of hidden) {
+        el.style.visibility = visibility;
+      }
+      fabricRef.current?.requestRenderAll();
+    }
+  }, []);
+
+  const scheduleCanvasSave = useCallback(() => {
+    if (canvasSaveDebounceRef.current) clearTimeout(canvasSaveDebounceRef.current);
+    canvasSaveDebounceRef.current = setTimeout(() => {
+      void captureComposeSnapshot()
+        .then((blob) => (blob ? uploadCanvasSnapshot(blob) : undefined))
+        .catch(() => {});
+    }, 1800);
+  }, [captureComposeSnapshot]);
+
+  const scheduleCanvasSaveRef = useRef(scheduleCanvasSave);
+
+  useEffect(() => {
+    historyRef.current = history;
+  }, [history]);
+
+  useEffect(() => {
+    photoSrcRef.current = photoSrc;
+    photoPosRef.current = photoPos;
+    photoScaleRef.current = photoScale;
+    photoActiveRef.current = photoActive;
+  }, [photoSrc, photoPos, photoScale, photoActive]);
+
+  useEffect(() => {
+    scheduleCanvasSaveRef.current = scheduleCanvasSave;
+  }, [scheduleCanvasSave]);
 
   const syncTextCount = useCallback((c: fabric.Canvas) => {
     setTextCount(c.getObjects().filter((o) => o.type === "i-text").length);
@@ -330,9 +483,9 @@ export default function CanvasEditor() {
       if (text) {
         applyTextControlDefaults(text);
         setHasTextSelection(true);
-        setSelectedTextFill((text.fill as string) || "#1a4a2a");
+        setSelectedTextFill((text.fill as string) || NOTE_TEXT_DEFAULT_COLOR);
         setSelectedTextFont((text.fontFamily as string) || TEXT_FONTS[0].value);
-        setSelectedTextSize(Math.round(text.fontSize ?? 28));
+        setSelectedTextSize(Math.round(text.fontSize ?? NOTE_TEXT_DEFAULT_SIZE));
       } else {
         setHasTextSelection(false);
       }
@@ -404,7 +557,7 @@ export default function CanvasEditor() {
 
     let fc = fabricRef.current;
     if (!fc) {
-      fc = new fabric.Canvas(el, {
+      const canvas = new fabric.Canvas(el, {
         width: dimensions.width,
         height: dimensions.height,
         backgroundColor: "transparent",
@@ -415,56 +568,63 @@ export default function CanvasEditor() {
         selectionColor: FABRIC_SEL_TINT,
         selectionBorderColor: FABRIC_ACCENT,
       });
-      fabricRef.current = fc;
-      disableCanvasDragSelection(fc);
+      fabricRef.current = canvas;
+      fc = canvas;
+      disableCanvasDragSelection(canvas);
+      seedDefaultNoteText(canvas);
+      migrateDefaultNameSlot(canvas);
 
       const onChange = () => {
-        syncTextCount(fc!);
-        syncTextSelection(fc!);
+        syncTextCount(canvas);
+        syncTextSelection(canvas);
       };
 
       const blockSelectionIfPhotoMode = () => {
         if (photoActiveRef.current) {
-          clearFabricSelection(fc);
+          clearFabricSelection(canvas);
           return true;
         }
         return false;
       };
 
-      fc.on("selection:created", () => {
+      canvas.on("selection:created", () => {
         if (blockSelectionIfPhotoMode()) return;
         onChange();
       });
-      fc.on("selection:updated", () => {
+      canvas.on("selection:updated", () => {
         if (blockSelectionIfPhotoMode()) return;
         onChange();
       });
-      fc.on("selection:cleared", () => {
-        syncTextCount(fc!);
+      canvas.on("selection:cleared", () => {
+        syncTextCount(canvas);
         setHasTextSelection(false);
       });
-      fc.on("object:added", () => {
+      canvas.on("object:added", () => {
         onChange();
-        commitHistory(fc);
+        commitHistory(canvas);
       });
-      fc.on("object:removed", () => {
+      canvas.on("object:removed", () => {
         onChange();
-        commitHistory(fc);
+        commitHistory(canvas);
       });
-      fc.on("object:modified", (e) => {
+      canvas.on("object:modified", (e) => {
         const target = e.target;
         if (isFabricText(target)) {
           if (normalizeTextScale(target)) {
-            setSelectedTextSize(Math.round(target.fontSize ?? 28));
+            setSelectedTextSize(Math.round(target.fontSize ?? NOTE_TEXT_DEFAULT_SIZE));
           }
         }
         refreshLayers();
         if (historyDebounceRef.current) clearTimeout(historyDebounceRef.current);
-        historyDebounceRef.current = setTimeout(() => commitHistory(fc), 400);
+        historyDebounceRef.current = setTimeout(() => commitHistory(canvas), 400);
+        scheduleCanvasSaveRef.current();
       });
-      fc.on("text:changed", () => refreshLayers());
+      canvas.on("text:changed", () => {
+        refreshLayers();
+        scheduleCanvasSaveRef.current();
+      });
 
-      fc.on("mouse:down", (opt) => {
+      canvas.on("mouse:down", (opt) => {
         const target = opt.target;
         if (target && isFabricText(target)) {
           setPhotoActive(false);
@@ -472,41 +632,69 @@ export default function CanvasEditor() {
           return;
         }
         if (!target && photoSrcRef.current) {
-          const pointer = fc.getPointer(opt.e);
+          const pointer = canvas.getScenePoint(opt.e);
           if (
             pointerInPhotoZone(
               pointer.x,
               pointer.y,
-              fc.getWidth(),
-              fc.getHeight(),
+              canvas.getWidth(),
+              canvas.getHeight(),
               photoPosRef.current,
               photoScaleRef.current,
             )
           ) {
             setPhotoActive(true);
             setTextEditMode(false);
-            fc.discardActiveObject();
-            fc.requestRenderAll();
+            canvas.discardActiveObject();
+            canvas.requestRenderAll();
             setSelectedLayerId("photo");
             setHasTextSelection(false);
-            return;
           }
-        }
-        if (!target) {
-          setPhotoActive(false);
-          setTextEditMode(true);
-          fc.discardActiveObject();
-          fc.requestRenderAll();
-          setSelectedLayerId(null);
-          setHasTextSelection(false);
         }
       });
 
-      clearFabricSelection(fc);
-      commitHistory(fc);
+      canvas.on("mouse:dblclick", (opt) => {
+        const target = opt.target;
+        if (target && isFabricText(target)) {
+          setPhotoActive(false);
+          setTextEditMode(true);
+          canvas.setActiveObject(target);
+          canvas.requestRenderAll();
+          if ("enterEditing" in target && typeof target.enterEditing === "function") {
+            target.enterEditing();
+          }
+          syncTextSelection(canvas);
+          return;
+        }
+        if (!target) {
+          const pointer = canvas.getScenePoint(opt.e);
+          const inPhoto =
+            photoSrcRef.current &&
+            pointerInPhotoZone(
+              pointer.x,
+              pointer.y,
+              canvas.getWidth(),
+              canvas.getHeight(),
+              photoPosRef.current,
+              photoScaleRef.current,
+            );
+          if (!inPhoto) {
+            setPhotoActive(false);
+            setTextEditMode(true);
+            setSelectedLayerId(null);
+            setHasTextSelection(false);
+            canvas.discardActiveObject();
+            canvas.requestRenderAll();
+          }
+        }
+      });
+
+      clearFabricSelection(canvas);
+      commitHistory(canvas);
     } else {
       fc.setDimensions({ width: dimensions.width, height: dimensions.height });
       disableCanvasDragSelection(fc);
+      migrateDefaultNameSlot(fc);
       if (photoActiveRef.current) clearFabricSelection(fc);
     }
     fc.requestRenderAll();
@@ -517,6 +705,20 @@ export default function CanvasEditor() {
     syncTextSelection,
     commitHistory,
     refreshLayers,
+  ]);
+
+  useEffect(() => {
+    if (dimensions.width < 100) return;
+    scheduleCanvasSave();
+  }, [
+    photoSrc,
+    photoPos,
+    photoScale,
+    photoFlipX,
+    photoAngle,
+    filters,
+    dimensions.width,
+    scheduleCanvasSave,
   ]);
 
   useEffect(() => {
@@ -593,9 +795,16 @@ export default function CanvasEditor() {
       }
     };
     const onUp = (e: PointerEvent) => {
-      if (dragRef.current?.pointerId === e.pointerId) dragRef.current = null;
+      const wasDragging = dragRef.current?.pointerId === e.pointerId;
+      if (wasDragging) dragRef.current = null;
       if (pendingDragRef.current?.pointerId === e.pointerId) pendingDragRef.current = null;
-      if (resizeRef.current?.pointerId === e.pointerId) resizeRef.current = null;
+      if (resizeRef.current?.pointerId === e.pointerId) {
+        suppressClickRef.current = true;
+        resizeRef.current = null;
+        scheduleCanvasSaveRef.current();
+      } else if (wasDragging) {
+        scheduleCanvasSaveRef.current();
+      }
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -622,11 +831,15 @@ export default function CanvasEditor() {
         setPhotoAngle(0);
         setFilters({ ...DEFAULT_FILTERS });
         setPhotoSrc(data);
-        setPhotoActive(false);
-        setTextEditMode(true);
+        setPhotoActive(true);
+        setTextEditMode(false);
+        setSelectedLayerId("photo");
         clearFabricSelection(fabricRef.current);
-        showToast("Photo added — click portrait to move/resize, or add text.", "success");
-        setTimeout(() => refreshLayers(), 0);
+        showToast("Photo added — drag to move, corners to resize.", "success");
+        setTimeout(() => {
+          refreshLayers();
+          scheduleCanvasSave();
+        }, 400);
       });
     };
     reader.readAsDataURL(file);
@@ -642,6 +855,29 @@ export default function CanvasEditor() {
     setLayers(buildLayerRows(fc, !!photoSrc));
     setHasTextSelection(false);
   }, [photoSrc]);
+
+  const deselectPhoto = useCallback(() => {
+    setPhotoActive(false);
+    setTextEditMode(true);
+    setSelectedLayerId(null);
+    setHasTextSelection(false);
+  }, []);
+
+  const enterTextEditing = useCallback(
+    (text: fabric.IText) => {
+      setPhotoActive(false);
+      setTextEditMode(true);
+      const fc = fabricRef.current;
+      if (!fc) return;
+      fc.setActiveObject(text);
+      fc.requestRenderAll();
+      if ("enterEditing" in text && typeof text.enterEditing === "function") {
+        text.enterEditing();
+      }
+      syncTextSelection(fc);
+    },
+    [syncTextSelection],
+  );
 
   useEffect(() => {
     if (photoActive) clearFabricSelection(fabricRef.current);
@@ -764,17 +1000,11 @@ export default function CanvasEditor() {
   );
 
   const handleEditSelectedText = () => {
-    setPhotoActive(false);
-    setTextEditMode(true);
     const fc = fabricRef.current;
     if (!fc) return;
     const text = getActiveText(fc);
     if (!text) return;
-    fc.setActiveObject(text);
-    fc.requestRenderAll();
-    if ("enterEditing" in text && typeof text.enterEditing === "function") {
-      text.enterEditing();
-    }
+    enterTextEditing(text);
   };
 
   const handleAddText = () => {
@@ -782,7 +1012,7 @@ export default function CanvasEditor() {
     setTextEditMode(true);
     const fc = fabricRef.current;
     if (!fc) return;
-    const size = Math.round(fc.getWidth() / 18);
+    const size = NOTE_TEXT_DEFAULT_SIZE;
     const text = new fabric.IText("Your Name", {
       left: fc.getWidth() / 2,
       top: fc.getHeight() * 0.12,
@@ -846,6 +1076,7 @@ export default function CanvasEditor() {
     if (fc) {
       fc.getObjects().forEach((o) => fc.remove(o));
       fc.discardActiveObject();
+      seedDefaultNoteText(fc);
       fc.requestRenderAll();
       const h = pushHistory(createHistory(), fc);
       historyRef.current = h;
@@ -870,31 +1101,14 @@ export default function CanvasEditor() {
     setIsDownloading(true);
     showToast("Saving your image...", "loading");
 
-    fabricRef.current?.discardActiveObject();
-    fabricRef.current?.requestRenderAll();
     setPhotoActive(false);
-
-    const hitLayer = composeRef.current.querySelector(".note-compose__photo-hit");
-    const hitWasVisible =
-      hitLayer instanceof HTMLElement ? hitLayer.style.visibility : "";
-    if (hitLayer instanceof HTMLElement) hitLayer.style.visibility = "hidden";
-
-    await new Promise((r) => setTimeout(r, 80));
+    await new Promise((r) => setTimeout(r, 50));
 
     try {
-      const snapshot = await html2canvas(composeRef.current, {
-        backgroundColor: PAPER_BG,
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        allowTaint: true,
-      });
-
-      const dataURL = snapshot.toDataURL("image/png");
+      const blob = await captureComposeSnapshot();
+      if (!blob) throw new Error("capture failed");
 
       try {
-        const res = await fetch(dataURL);
-        const blob = await res.blob();
         const result = await saveDesign(blob, userEmail);
         setMintResult(result);
         fetch("/api/users/record-mint", { method: "POST" }).catch(() => {});
@@ -904,7 +1118,9 @@ export default function CanvasEditor() {
           showToast(err.message, "error", 6000);
           return;
         }
+        const dataURL = URL.createObjectURL(blob);
         downloadLocalPng(dataURL);
+        URL.revokeObjectURL(dataURL);
         showToast(
           apiOnline === false
             ? "Backend offline — saved locally."
@@ -916,7 +1132,6 @@ export default function CanvasEditor() {
     } catch {
       showToast("Could not capture image. Try again.", "error");
     } finally {
-      if (hitLayer instanceof HTMLElement) hitLayer.style.visibility = hitWasVisible || "visible";
       setIsDownloading(false);
       setToast((t) => (t?.type === "loading" ? null : t));
     }
@@ -929,12 +1144,39 @@ export default function CanvasEditor() {
     width: `${PORTRAIT.w * 140}%`,
     height: `${PORTRAIT.h * 140}%`,
   };
-  const photoLayerStyle = {
+  const photoFrameStyle: React.CSSProperties = {
+    position: "absolute",
     left: `${photoPos.x * 100}%`,
     top: `${photoPos.y * 100}%`,
     width: photoBoxSize.width,
     height: photoBoxSize.height,
-    transform: `translate(-50%, -50%) scale(${photoScale})`,
+    transform: "translate(-50%, -50%)",
+    visibility: photoSrc ? "visible" : "hidden",
+  };
+  const photoScaledStyle: React.CSSProperties = {
+    width: "100%",
+    height: "100%",
+    transform: `scale(${photoScale})`,
+    transformOrigin: "center center",
+  };
+  const handleSizeFix = (corner: PhotoCorner): React.CSSProperties => ({
+    transform: `scale(${1 / photoScale})`,
+    transformOrigin:
+      corner === "nw"
+        ? "top left"
+        : corner === "ne"
+          ? "top right"
+          : corner === "sw"
+            ? "bottom left"
+            : "bottom right",
+  });
+
+  const handleComposeDoubleClick = (e: React.MouseEvent) => {
+    const t = e.target as HTMLElement;
+    if (t.closest(".note-compose__photo-hit") || t.closest(".note-compose__resize-handle")) return;
+    deselectPhoto();
+    fabricRef.current?.discardActiveObject();
+    fabricRef.current?.requestRenderAll();
   };
 
   return (
@@ -977,13 +1219,9 @@ export default function CanvasEditor() {
                 return;
               }
               const t = e.target as HTMLElement;
-              if (t.closest(".note-compose__photo-hit")) return;
-              setPhotoActive(false);
-              setTextEditMode(true);
-              setSelectedLayerId(null);
-              fabricRef.current?.discardActiveObject();
-              fabricRef.current?.requestRenderAll();
+              if (t.closest(".note-compose__photo-hit") || t.closest(".note-compose__resize-handle")) return;
             }}
+            onDoubleClick={handleComposeDoubleClick}
             style={{
               width: dimensions.width || undefined,
               height: dimensions.height || undefined,
@@ -993,28 +1231,27 @@ export default function CanvasEditor() {
             {/* Layer order is fixed — never mount/unmount around Fabric canvas (prevents insertBefore crash) */}
             <div
               className="note-compose__photo-visual"
-              style={{
-                ...photoLayerStyle,
-                visibility: photoSrc ? "visible" : "hidden",
-              }}
+              style={{ ...photoFrameStyle, zIndex: 1, pointerEvents: "none" }}
               aria-hidden
             >
-              {photoSrc ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={photoSrc}
-                  alt=""
-                  draggable={false}
-                  className="note-compose__photo"
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    transform: photoTransform,
-                    filter: photoFilterCss,
-                    opacity: filters.opacity / 100,
-                  }}
-                />
-              ) : null}
+              <div style={photoScaledStyle}>
+                {photoSrc ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={photoSrc}
+                    alt=""
+                    draggable={false}
+                    className="note-compose__photo"
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      transform: photoTransform,
+                      filter: photoFilterCss,
+                      opacity: filters.opacity / 100,
+                    }}
+                  />
+                ) : null}
+              </div>
             </div>
 
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1028,40 +1265,50 @@ export default function CanvasEditor() {
             {/* MINT MY FACE watermark is added on the server when you save — not shown here so the editor stays clean */}
 
             <div
-              className={`note-compose__photo-hit${photoActive ? " note-compose__photo-hit--active" : ""}`}
+              className="note-compose__photo-frame"
               style={{
-                ...photoLayerStyle,
-                visibility: photoSrc ? "visible" : "hidden",
-                pointerEvents: photoSrc && photoEditing ? "auto" : "none",
+                ...photoFrameStyle,
                 zIndex: photoEditing ? 12 : 8,
               }}
-              onPointerDown={handlePhotoHitPointerDown}
-              onWheel={handlePhotoWheel}
-              onClick={(e) => e.stopPropagation()}
-              role="presentation"
-              tabIndex={-1}
-              aria-hidden={!photoSrc}
-              aria-label="Your photo — click to select, drag to move, scroll to resize"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") selectPhoto();
-              }}
             >
-              {photoActive && photoSrc
-                ? (["nw", "ne", "sw", "se"] as const).map((corner) => (
+              <div
+                className={`note-compose__photo-hit${photoActive ? " note-compose__photo-hit--active" : ""}`}
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  ...photoScaledStyle,
+                  pointerEvents: photoSrc ? "auto" : "none",
+                }}
+                onPointerDown={handlePhotoHitPointerDown}
+                onWheel={handlePhotoWheel}
+                onClick={(e) => e.stopPropagation()}
+                role="presentation"
+                tabIndex={-1}
+                aria-hidden={!photoSrc}
+                aria-label="Your photo — click to select, drag to move, scroll to resize"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") selectPhoto();
+                }}
+              />
+              {photoActive && photoSrc ? (
+                <div className="note-compose__photo-handles" style={photoScaledStyle}>
+                  {(["nw", "ne", "sw", "se"] as const).map((corner) => (
                     <span
                       key={corner}
+                      style={handleSizeFix(corner)}
                       className={`note-compose__resize-handle note-compose__resize-handle--${corner}`}
                       onPointerDown={(e) => handleResizePointerDown(e, corner)}
                     />
-                  ))
-                : null}
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             <canvas ref={textCanvasRef} className="note-compose__text-layer note-compose__text-layer--interactive" />
           </div>
         </div>
         <p className="editor-preview-footer">
-          Undo/Redo · click text to select · corners or sidebar to resize · watermark appears on saved image
+          Double-click name or message to edit · click portrait to move photo · double-click canvas to exit photo mode
         </p>
       </section>
 

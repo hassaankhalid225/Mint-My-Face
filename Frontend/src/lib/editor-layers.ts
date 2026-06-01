@@ -15,8 +15,17 @@ export function ensureLayerId(obj: FabricObject): string {
   return id;
 }
 
+export function registerLayerId(obj: FabricObject, id: string): void {
+  layerIdMap.set(obj, id);
+}
+
 export function getTextLabel(obj: IText): string {
-  const raw = (obj.text || "Text").replace(/\n/g, " ").trim();
+  const id = layerIdMap.get(obj);
+  const raw = (obj.text || "").replace(/\n/g, " ").trim();
+  if (!raw) {
+    if (id === "text-name") return "Your name";
+    if (id === "text-body") return "Your message";
+  }
   return raw.length > 28 ? `${raw.slice(0, 28)}…` : raw || "Text";
 }
 

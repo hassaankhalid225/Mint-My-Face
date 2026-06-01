@@ -128,12 +128,24 @@ export function standardPreviewUrl(designId: string): string {
   return `${API_BASE}/api/designs/${designId}/preview-standard`;
 }
 
+export async function uploadCanvasSnapshot(imageBlob: Blob): Promise<void> {
+  const formData = new FormData();
+  formData.append("image", imageBlob, "one-dollar-photo.png");
+
+  const res = await fetch(`${API_BASE}/api/uploads/canvas`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) throw new ApiError(await parseError(res), res.status);
+}
+
 export async function saveDesign(
   imageBlob: Blob,
   _userEmail?: string | null,
 ): Promise<DesignCreateResult> {
   const formData = new FormData();
-  formData.append("image", imageBlob, "mint-my-face-note.png");
+  formData.append("image", imageBlob, "one-dollar-photo.png");
 
   const res = await fetch(`${API_BASE}/api/designs`, {
     method: "POST",

@@ -59,10 +59,6 @@ export default function MintResultModal({
     );
   };
 
-  const handlePreviewDownload = () => {
-    triggerDownload(previewUrl, `mint-my-face-preview-${result.design_id.slice(0, 8)}.png`);
-  };
-
   const requireLogin = (next: string) => {
     router.push(`/login?callbackUrl=${encodeURIComponent(next)}`);
   };

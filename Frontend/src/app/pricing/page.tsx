@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { Check } from "lucide-react";
+import ElectricBorder from "@/components/ElectricBorder";
 import JsonLd from "@/components/JsonLd";
 import SiteNav from "@/components/SiteNav";
 import PricingCheckoutButton from "@/components/PricingCheckoutButton";
@@ -18,7 +19,13 @@ export const metadata = pageMetadata({
   keywords: ["pricing", "subscription", "pro plan", "dollar bill HD download"],
 });
 
+const PRICING_PLAN_ORDER = ["free", "pro", "starter"] as const;
+
 export default function PricingPage() {
+  const pricingPlans = PRICING_PLAN_ORDER.map((id) => PLANS.find((p) => p.id === id)).filter(
+    (p): p is (typeof PLANS)[number] => !!p,
+  );
+
   return (
     <div className="page-shell home-page">
       <JsonLd
@@ -46,39 +53,57 @@ export default function PricingPage() {
           </header>
 
           <div className="pricing-grid">
-            {PLANS.map((plan) => (
-              <article
-                key={plan.id}
-                className={`pricing-card${plan.featured ? " pricing-card--featured" : ""}`}
-              >
-                {plan.featured && <span className="pricing-card__badge">Most popular</span>}
-                <h2 className="pricing-card__name">{plan.name}</h2>
-                <p className="pricing-card__price">
-                  <span>{plan.priceLabel}</span>
-                  {plan.priceCents > 0 && <small> / {plan.period}</small>}
-                </p>
-                <p className="pricing-card__desc">{plan.description}</p>
-                <ul className="pricing-card__features">
-                  {plan.features.map((f) => (
-                    <li key={f}>
-                      <Check size={16} strokeWidth={2.5} aria-hidden />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <PricingCheckoutButton
-                  planId={plan.id}
-                  label={
-                    plan.id === "free"
-                      ? "Start free"
-                      : plan.id === "starter"
-                        ? "Get Starter"
-                        : "Go Pro"
-                  }
-                  featured={plan.featured}
-                />
-              </article>
-            ))}
+            {pricingPlans.map((plan) => {
+              const card = (
+                <article
+                  className={`pricing-card${plan.featured ? " pricing-card--featured" : ""}`}
+                >
+                  {plan.featured && <span className="pricing-card__badge">Most popular</span>}
+                  <h2 className="pricing-card__name">{plan.name}</h2>
+                  <p className="pricing-card__price">
+                    <span>{plan.priceLabel}</span>
+                    {plan.priceCents > 0 && <small> / {plan.period}</small>}
+                  </p>
+                  <p className="pricing-card__desc">{plan.description}</p>
+                  <ul className="pricing-card__features">
+                    {plan.features.map((f) => (
+                      <li key={f}>
+                        <Check size={16} strokeWidth={2.5} aria-hidden />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <PricingCheckoutButton
+                    planId={plan.id}
+                    label={
+                      plan.id === "free"
+                        ? "Start free"
+                        : plan.id === "starter"
+                          ? "Get Starter"
+                          : "Go Pro"
+                    }
+                    featured={plan.featured}
+                  />
+                </article>
+              );
+
+              if (plan.featured) {
+                return (
+                  <ElectricBorder
+                    key={plan.id}
+                    color="var(--color-primary)"
+                    speed={1}
+                    chaos={0.12}
+                    thickness={2}
+                    style={{ borderRadius: 12 }}
+                  >
+                    {card}
+                  </ElectricBorder>
+                );
+              }
+
+              return <div key={plan.id}>{card}</div>;
+            })}
           </div>
 
           <section className="pricing-faq" aria-labelledby="pricing-faq-heading">

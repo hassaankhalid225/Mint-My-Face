@@ -1359,6 +1359,22 @@ body {
   background: transparent;
 }
 
+.note-compose__photo-frame {
+  overflow: visible;
+  pointer-events: none;
+}
+
+.note-compose__photo-frame .note-compose__photo-hit {
+  pointer-events: auto;
+}
+
+.note-compose__photo-handles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
 /* Fabric canvas — no purple selection tint bleeding on the note */
 .note-compose .canvas-container {
   background: transparent !important;
@@ -1400,10 +1416,10 @@ body {
   pointer-events: auto;
 }
 
-.note-compose__resize-handle--nw { top: -6px; left: -6px; cursor: nwse-resize; }
-.note-compose__resize-handle--ne { top: -6px; right: -6px; cursor: nesw-resize; }
-.note-compose__resize-handle--sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
-.note-compose__resize-handle--se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+.note-compose__resize-handle--nw { top: -6px; left: -6px; cursor: nwse-resize; transform-origin: top left; }
+.note-compose__resize-handle--ne { top: -6px; right: -6px; cursor: nesw-resize; transform-origin: top right; }
+.note-compose__resize-handle--sw { bottom: -6px; left: -6px; cursor: nesw-resize; transform-origin: bottom left; }
+.note-compose__resize-handle--se { bottom: -6px; right: -6px; cursor: nwse-resize; transform-origin: bottom right; }
 
 .note-compose__note {
   position: absolute;
@@ -1648,6 +1664,9 @@ body {
 .pricing-page__intro {
   max-width: 42rem;
   margin-top: var(--space-sm);
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
   color: var(--color-body);
 }
 

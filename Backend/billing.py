@@ -1,7 +1,6 @@
 """User plans, daily image limits, plan expiry, and Stripe checkout."""
 
 from __future__ import annotations
-
 import os
 import uuid
 from datetime import date, datetime, timedelta
@@ -152,9 +151,32 @@ def user_has_hd(email: str | None) -> bool:
     return effective_plan(user) == "pro"
 
 
-def _stripe_price_id(plan: str) -> str:
+def _stripe_price_id(plan: str) -> str | None:
+    """Return a Stripe Price ID only when it looks valid (price_…)."""
     key = f"STRIPE_PRICE_{plan.upper()}"
-    return os.getenv(key, "").strip()
+    raw = os.getenv(key, "").strip()
+    if raw.startswith("price_"):
+        return raw
+    return None
+
+
+def _checkout_line_items(plan: PlanId) -> tuple[list[dict], str]:
+    price_id = _stripe_price_id(plan)
+    if price_id:
+        return [{"price": price_id, "quantity": 1}], "payment"
+    return (
+        [
+            {
+                "price_data": {
+                    "currency": "usd",
+                    "unit_amount": PLAN_PRICES_CENTS[plan],
+                    "product_data": {"name": f"Mint My Face — {plan.title()}"},
+                },
+                "quantity": 1,
+            }
+        ],
+        "payment",
+    )
 
 
 def create_stripe_checkout_url(plan: PlanId, email: str, base_url: str) -> str:
@@ -167,24 +189,7 @@ def create_stripe_checkout_url(plan: PlanId, email: str, base_url: str) -> str:
         import stripe
 
         stripe.api_key = secret
-        price_id = _stripe_price_id(plan)
-        is_subscription = False
-
-        if price_id:
-            line_items = [{"price": price_id, "quantity": 1}]
-            mode = "payment"
-        else:
-            mode = "payment"
-            line_items = [
-                {
-                    "price_data": {
-                        "currency": "usd",
-                        "unit_amount": PLAN_PRICES_CENTS[plan],
-                        "product_data": {"name": f"Mint My Face — {plan.title()}"},
-                    },
-                    "quantity": 1,
-                }
-            ]
+        line_items, mode = _checkout_line_items(plan)
 
         session = stripe.checkout.Session.create(
             mode=mode,
@@ -195,7 +200,8 @@ def create_stripe_checkout_url(plan: PlanId, email: str, base_url: str) -> str:
             metadata={"plan": plan, "email": email},
         )
         return session.url or f"{base_url}/pricing"
-    except Exception:
+    except Exception as exc:
+        print(f"[billing] Stripe checkout failed for {plan}: {exc}")
         return f"{base_url}/pricing?checkout=error&plan={plan}"
 
 

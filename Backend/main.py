@@ -32,9 +32,20 @@ from watermark import apply_watermark
 UPLOAD_DIR = Path("uploads")
 ORIGINAL_DIR = UPLOAD_DIR / "original"
 WATERMARKED_DIR = UPLOAD_DIR / "watermarked"
+ORIGINAL_CANVAS_NAME = "one-dollar-photo.png"
 
 for folder in (ORIGINAL_DIR, WATERMARKED_DIR):
     folder.mkdir(parents=True, exist_ok=True)
+
+
+def _save_original_canvas(content: bytes) -> Path:
+    """Store only the latest canvas export in uploads/original."""
+    target = ORIGINAL_DIR / ORIGINAL_CANVAS_NAME
+    for old in ORIGINAL_DIR.iterdir():
+        if old.is_file() and old.resolve() != target.resolve():
+            old.unlink(missing_ok=True)
+    target.write_bytes(content)
+    return target
 
 CORS_ORIGINS = os.getenv(
     "CORS_ORIGINS",
@@ -215,6 +226,20 @@ def _email_from_auth(auth_user: TokenUser | None, x_user_email: str | None) -> s
     return x_user_email.lower().strip() if x_user_email else None
 
 
+@app.post("/api/uploads/canvas")
+async def upload_canvas(image: UploadFile = File(...)):
+    """Save the full dollar-note canvas export as uploads/original/one-dollar-photo.png."""
+    if not image.content_type or not image.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image (PNG, JPEG, or WebP)")
+
+    content = await image.read()
+    if len(content) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image must be under 15 MB")
+
+    path = _save_original_canvas(content)
+    return {"filename": ORIGINAL_CANVAS_NAME, "path": str(path)}
+
+
 @app.post("/api/designs", response_model=DesignCreateResponse)
 async def save_design(
     image: UploadFile = File(...),
@@ -235,15 +260,13 @@ async def save_design(
         raise HTTPException(status_code=400, detail="File must be an image (PNG, JPEG, or WebP)")
 
     design_id = str(uuid.uuid4())
-    original_path = ORIGINAL_DIR / f"{design_id}.png"
     watermarked_path = WATERMARKED_DIR / f"{design_id}.png"
 
     content = await image.read()
     if len(content) > 15 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Image must be under 15 MB")
 
-    with open(original_path, "wb") as buffer:
-        buffer.write(content)
+    original_path = _save_original_canvas(content)
 
     try:
         apply_watermark(str(original_path), str(watermarked_path))
@@ -394,5 +417,5 @@ async def download_hd(
     return FileResponse(
         path,
         media_type="image/png",
-        filename=f"mint-my-face-hd-{design_id[:8]}.png",
+        filename=ORIGINAL_CANVAS_NAME,
     )

@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // WebGL splash effect — third-party style code, not worth lint-fixing
+    "src/components/SplashCursor.tsx",
   ]),
 ]);
 

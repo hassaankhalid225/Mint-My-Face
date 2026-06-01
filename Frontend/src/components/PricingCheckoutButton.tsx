@@ -39,6 +39,10 @@ export default function PricingCheckoutButton({
         planId,
         session.user.email!,
       );
+      if (checkout_url.includes("checkout=error")) {
+        alert("Stripe checkout failed. Check backend logs and your Stripe keys.");
+        return;
+      }
       if (checkout_url.startsWith("http://") || checkout_url.startsWith("https://")) {
         window.location.href = checkout_url;
       } else {

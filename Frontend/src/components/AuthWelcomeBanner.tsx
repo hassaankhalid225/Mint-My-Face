@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { CheckCircle, X } from "lucide-react";
@@ -8,20 +8,16 @@ import { CheckCircle, X } from "lucide-react";
 export default function AuthWelcomeBanner() {
   const searchParams = useSearchParams();
   const { data: session, status } = useSession();
-  const [visible, setVisible] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
 
-  useEffect(() => {
-    if (status !== "authenticated") return;
-    const welcome = searchParams.get("welcome") === "1";
-    const auth = searchParams.get("auth");
-    const isNew =
-      session?.user?.isNewUser === true || welcome || auth === "signup";
-    if (isNew || welcome || auth === "signup") {
-      setVisible(true);
-    }
-  }, [status, searchParams, session]);
+  const welcome = searchParams.get("welcome") === "1";
+  const auth = searchParams.get("auth");
+  const shouldShow =
+    status === "authenticated" &&
+    !dismissed &&
+    (session?.user?.isNewUser === true || welcome || auth === "signup");
 
-  if (!visible || status !== "authenticated") return null;
+  if (!shouldShow) return null;
 
   const name = session?.user?.name?.split(" ")[0] ?? "there";
 
@@ -36,7 +32,7 @@ export default function AuthWelcomeBanner() {
       <button
         type="button"
         className="auth-welcome-banner__close"
-        onClick={() => setVisible(false)}
+        onClick={() => setDismissed(true)}
         aria-label="Dismiss"
       >
         <X size={18} />

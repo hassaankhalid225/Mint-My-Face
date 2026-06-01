@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Loader } from "lucide-react";
@@ -9,20 +9,18 @@ const REMEMBER_EMAIL_KEY = "mmf_remember_email";
 
 export default function EmailLoginForm({ callbackUrl }: { callbackUrl: string }) {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => {
+    if (typeof window === "undefined") return "";
+    try {
+      return localStorage.getItem(REMEMBER_EMAIL_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(REMEMBER_EMAIL_KEY);
-      if (saved) setEmail(saved);
-    } catch {
-      /* ignore */
-    }
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

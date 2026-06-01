@@ -10,11 +10,10 @@ import {
   Zap,
   ArrowRight,
 } from "lucide-react";
-import JsonLd from "@/components/JsonLd";
 import SiteNav from "@/components/SiteNav";
 import SiteLogo from "@/components/SiteLogo";
 import HomeSplashBackground from "@/components/HomeSplashBackground";
-import { pageMetadata, SITE_NAME, SITE_URL } from "@/lib/seo";
+import { pageMetadata, SITE_NAME } from "@/lib/seo";
 
 export const metadata = pageMetadata({
   title: `${SITE_NAME} — Put Your Face on a Dollar Bill`,

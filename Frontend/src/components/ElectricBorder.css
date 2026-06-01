@@ -1,0 +1,123 @@
+/* Electric border — adapted from @BalintFerenczy (https://codepen.io/BalintFerenczy/pen/KwdoyEN) */
+
+.electric-border {
+  --eb-color: var(--color-primary);
+  --eb-thickness: 2px;
+  --eb-radius: var(--rounded-lg);
+  position: relative;
+  width: 100%;
+}
+
+.electric-border__svg {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.electric-border__frame {
+  position: relative;
+  border-radius: var(--eb-radius);
+}
+
+.electric-border__inner {
+  position: relative;
+  border-radius: var(--eb-radius);
+  isolation: isolate;
+}
+
+/* Soft halo — stays behind the card */
+.electric-border__bg-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--eb-radius);
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(24px);
+  transform: scale(1.04);
+  opacity: 0.28;
+  background: linear-gradient(
+    -30deg,
+    color-mix(in srgb, var(--eb-color) 70%, white),
+    transparent,
+    var(--eb-color)
+  );
+}
+
+.electric-border__content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+
+/* Animated border — on top of the card */
+.electric-border__effects {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: var(--eb-radius);
+  pointer-events: none;
+}
+
+.electric-border__main,
+.electric-border__glow-1,
+.electric-border__glow-2,
+.electric-border__overlay-1,
+.electric-border__overlay-2 {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--eb-radius);
+  pointer-events: none;
+}
+
+.electric-border__main {
+  border: var(--eb-thickness) solid var(--eb-color);
+  z-index: 3;
+}
+
+.electric-border__glow-1 {
+  border: var(--eb-thickness) solid color-mix(in srgb, var(--eb-color) 60%, transparent);
+  filter: blur(1px);
+  z-index: 2;
+}
+
+.electric-border__glow-2 {
+  border: var(--eb-thickness) solid color-mix(in srgb, var(--eb-color) 85%, white);
+  filter: blur(4px);
+  z-index: 1;
+}
+
+.electric-border__overlay-1,
+.electric-border__overlay-2 {
+  transform: scale(1.02);
+  filter: blur(8px);
+  background: linear-gradient(
+    -30deg,
+    color-mix(in srgb, var(--eb-color) 20%, white),
+    transparent 35%,
+    transparent 65%,
+    color-mix(in srgb, var(--eb-color) 20%, white)
+  );
+  z-index: 4;
+}
+
+.electric-border__overlay-1 {
+  opacity: 0.25;
+  mix-blend-mode: soft-light;
+}
+
+.electric-border__overlay-2 {
+  opacity: 0.15;
+  mix-blend-mode: overlay;
+}
+
+/* Pricing card inside electric border */
+.electric-border .pricing-card {
+  border: none;
+  background: var(--color-surface-card);
+  border-radius: calc(var(--eb-radius) - 2px);
+}
+
+.electric-border .pricing-card--featured {
+  border-color: transparent;
+}

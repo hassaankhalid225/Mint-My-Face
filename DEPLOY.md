@@ -1,19 +1,25 @@
 # Deploy Mint My Face on Vercel
 
-## Fix 404 on `*.vercel.app`
+## Fix build error: "No Next.js version detected"
 
-A **404 NOT_FOUND** on Vercel usually means the **Root Directory** is wrong.
+This happens when **Root Directory** is wrong or a root `vercel.json` runs `cd Frontend` while Vercel still looks for `package.json` at the repo root.
 
-### Required Vercel settings
+### Required Vercel settings (do this first)
 
-1. Open [Vercel Dashboard](https://vercel.com/dashboard) → your project → **Settings** → **General**
-2. **Root Directory** → click **Edit** → set to: `Frontend`
-3. **Save**
-4. Go to **Deployments** → latest deployment → **⋯** → **Redeploy**
+1. [Vercel Dashboard](https://vercel.com/dashboard) → **mint-my-face** → **Settings** → **General**
+2. **Root Directory** → **Edit** → type exactly: `Frontend`
+3. Confirm Vercel shows: *"The directory within your project where your code is located"*
+4. **Save**
+5. **Settings** → **Build & Development Settings** → reset overrides if any:
+   - **Framework Preset:** Next.js
+   - **Build Command:** leave default (or `prisma generate && next build`)
+   - **Install Command:** leave default (`npm install`)
+   - **Output Directory:** leave default (empty)
+6. **Deployments** → **Redeploy**
 
-If Root Directory is empty, Vercel builds the repo root (no Next.js app) and the site shows 404.
+Do **not** use a root-level `vercel.json` with `cd Frontend` — only `Frontend/vercel.json` is used when Root Directory is `Frontend`.
 
-### Environment variables (Vercel → Settings → Environment Variables)
+### Environment variables (Settings → Environment Variables)
 
 | Variable | Example |
 |----------|---------|
@@ -26,8 +32,6 @@ If Root Directory is empty, Vercel builds the repo root (no Next.js app) and the
 | `GOOGLE_CLIENT_ID` | From Google Cloud Console |
 | `GOOGLE_CLIENT_SECRET` | From Google Cloud Console |
 
-After adding variables, **Redeploy**.
-
 ### Google OAuth (production)
 
 In Google Cloud Console, add:
@@ -35,6 +39,4 @@ In Google Cloud Console, add:
 - **Authorized JavaScript origins:** `https://your-app.vercel.app`
 - **Redirect URI:** `https://your-app.vercel.app/api/auth/callback/google`
 
-### Build command (auto)
-
-`Frontend/package.json` runs `prisma generate && next build`. Root `vercel.json` is a fallback if Root Directory cannot be set.
+After adding variables, **Redeploy**.

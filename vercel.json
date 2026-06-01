@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd Frontend && npm install",
+  "buildCommand": "cd Frontend && npm run build",
+  "devCommand": "cd Frontend && npm run dev",
+  "framework": "nextjs"
+}

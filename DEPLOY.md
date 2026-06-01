@@ -23,7 +23,8 @@ Do **not** use a root-level `vercel.json` with `cd Frontend` — only `Frontend/
 
 | Variable | Example |
 |----------|---------|
-| `DATABASE_URL` | `file:./dev.db` (quick test) or Neon Postgres URL (production) |
+| `DATABASE_URL` | Neon **pooled** connection string (`?sslmode=require`) |
+| `DIRECT_URL` | Neon **direct** connection string (no `-pooler` in host; for migrations) |
 | `AUTH_SECRET` | Random 32+ character string |
 | `JWT_SECRET` | Same as `AUTH_SECRET` |
 | `NEXTAUTH_URL` | `https://your-app.vercel.app` |

@@ -274,15 +274,20 @@ export default function Home() {
         <div className="site-footer__inner">
           <SiteLogo size="sm" />
           <p className="type-body-sm">
-            © {new Date().getFullYear()} Mint My Face. For entertainment purposes only.
+            © {new Date().getFullYear()} Mint My Face. Digital novelty artwork for
+            entertainment only — not legal tender, not spendable, and not intended to
+            resemble genuine currency.
           </p>
           <div className="site-footer__links">
-            <a href="#" className="site-footer__link">
+            <Link href="/privacy" className="site-footer__link">
               Privacy
-            </a>
-            <a href="#" className="site-footer__link">
+            </Link>
+            <Link href="/terms" className="site-footer__link">
               Terms
-            </a>
+            </Link>
+            <Link href="/refund" className="site-footer__link">
+              Refund
+            </Link>
             <Link href="/editor" className="site-footer__link site-footer__link--accent">
               Editor
             </Link>

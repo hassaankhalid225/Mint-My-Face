@@ -1,6 +1,8 @@
-"""User plans, daily image limits, plan expiry, and Stripe checkout."""
+"""User plans, daily image limits, plan expiry, and checkout (Stripe + Paddle)."""
 
 from __future__ import annotations
+import hashlib
+import hmac
 import os
 import uuid
 from datetime import date, datetime, timedelta
@@ -212,4 +214,79 @@ def apply_stripe_checkout_completed(session: dict) -> bool:
     if not email or plan not in ("starter", "pro"):
         return False
     set_user_plan(email, plan)  # type: ignore[arg-type]
+    return True
+
+
+# =============================================================================
+# Paddle (Merchant of Record) — works in Pakistan, payout via Payoneer.
+# Frontend opens the Paddle.js overlay; this module only verifies the webhook
+# and activates the plan. The plan is derived from the paid Price ID (server
+# side, tamper-proof) — never from client-supplied data.
+# =============================================================================
+
+def paddle_plan_for_price(price_id: str) -> PlanId | None:
+    """Map a Paddle Price ID back to one of our plans via env config."""
+    price_id = (price_id or "").strip()
+    if not price_id:
+        return None
+    if price_id == os.getenv("PADDLE_PRICE_STARTER", "").strip():
+        return "starter"
+    if price_id == os.getenv("PADDLE_PRICE_PRO", "").strip():
+        return "pro"
+    return None
+
+
+def verify_paddle_signature(raw_body: bytes, signature_header: str) -> bool:
+    """Verify a Paddle webhook using the destination's secret key.
+
+    Header format: ``ts=<unix>;h1=<hex-hmac-sha256>``.
+    Signed payload is ``<ts>:<raw_body>`` keyed with PADDLE_WEBHOOK_SECRET.
+    """
+    secret = os.getenv("PADDLE_WEBHOOK_SECRET", "").strip()
+    if not secret or not signature_header:
+        return False
+
+    parts = dict(
+        piece.split("=", 1)
+        for piece in signature_header.split(";")
+        if "=" in piece
+    )
+    ts = parts.get("ts", "")
+    received = parts.get("h1", "")
+    if not ts or not received:
+        return False
+
+    signed_payload = f"{ts}:".encode() + raw_body
+    expected = hmac.new(secret.encode(), signed_payload, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, received)
+
+
+def apply_paddle_transaction_completed(data: dict) -> bool:
+    """Activate a plan from a completed Paddle transaction payload.
+
+    ``plan`` comes from the paid Price ID (trusted). ``email`` comes from the
+    checkout's custom_data, falling back to the transaction's customer details.
+    """
+    items = data.get("items") or []
+    plan: PlanId | None = None
+    for item in items:
+        price = (item or {}).get("price") or {}
+        plan = paddle_plan_for_price(price.get("id", ""))
+        if plan:
+            break
+
+    custom = data.get("custom_data") or {}
+    email = (custom.get("email") or "").lower().strip()
+    if not email:
+        # Fallback: Paddle sometimes nests the email under details/customer.
+        details = data.get("details") or {}
+        email = (
+            (details.get("customer") or {}).get("email")
+            or (data.get("customer") or {}).get("email")
+            or ""
+        ).lower().strip()
+
+    if not email or plan not in ("starter", "pro"):
+        return False
+    set_user_plan(email, plan)
     return True

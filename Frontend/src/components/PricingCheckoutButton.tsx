@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { PlanId } from "@/lib/plans";
 import { startPlanCheckout } from "@/lib/api";
+import { isPaddleEnabled, openPaddleCheckout } from "@/lib/paddle";
 
 export default function PricingCheckoutButton({
   planId,
@@ -35,6 +36,18 @@ export default function PricingCheckoutButton({
 
     setLoading(true);
     try {
+      // Preferred path: Paddle (Merchant of Record) overlay. The signed
+      // webhook activates the plan; successUrl reuses the existing handler.
+      if (isPaddleEnabled()) {
+        const successUrl = `${window.location.origin}/pricing?success=${planId}`;
+        await openPaddleCheckout({
+          plan: planId,
+          email: session.user.email!,
+          successUrl,
+        });
+        return;
+      }
+
       const { checkout_url } = await startPlanCheckout(
         planId,
         session.user.email!,

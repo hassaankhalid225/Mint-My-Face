@@ -128,6 +128,38 @@ export default function PricingPage() {
           <p className="pricing-page__back">
             <Link href="/editor">Try the editor →</Link>
           </p>
+
+          <p
+            className="type-body-sm"
+            style={{
+              marginTop: "2rem",
+              textAlign: "center",
+              opacity: 0.6,
+              maxWidth: "44rem",
+              marginInline: "auto",
+            }}
+          >
+            Mint My Face sells digital novelty artwork only. Every design is a fun,
+            personalized banknote-themed image delivered as a downloadable PNG. These
+            are decorative keepsakes for personal use — <strong>not legal tender, not
+            spendable, and not intended to resemble or replace genuine currency.</strong>
+          </p>
+
+          <p
+            className="type-body-sm"
+            style={{
+              marginTop: "1rem",
+              textAlign: "center",
+              display: "flex",
+              gap: "1.25rem",
+              justifyContent: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            <Link href="/terms">Terms of Service</Link>
+            <Link href="/privacy">Privacy Policy</Link>
+            <Link href="/refund">Refund Policy</Link>
+          </p>
         </div>
       </main>
     </div>

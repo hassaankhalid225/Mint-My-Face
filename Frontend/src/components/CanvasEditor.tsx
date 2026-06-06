@@ -76,15 +76,14 @@ if (fabric.FabricObject.ownDefaults) {
 const PORTRAIT = { cx: 0.5, cy: 0.5, w: 0.22, h: 0.62 } as const;
 
 /** Default text slots on the dollar-note template (fractions of canvas size). */
-const NOTE_TEXT_NAME = { left: 0.088, top: 0.492, width: 0.158 } as const;
-const NOTE_TEXT_BODY = { left: 0.058, top: 0.668, width: 0.3 } as const;
+const NOTE_TEXT_NAME = { left: 0.088, top: 0.42, width: 0.158 } as const;
 /** Previous default slots — used to migrate existing sessions. */
 const LEGACY_NOTE_TEXT_NAME_SLOTS = [
   { left: 0.078, top: 0.2, width: 0.2 },
   { left: 0.108, top: 0.318, width: 0.168 },
+  { left: 0.088, top: 0.492, width: 0.158 },
 ] as const;
 const DEFAULT_NAME_LAYER_ID = "text-name";
-const DEFAULT_BODY_LAYER_ID = "text-body";
 const NOTE_TEXT_DEFAULT_COLOR = "#41413e";
 const NOTE_TEXT_DEFAULT_SIZE = 25;
 
@@ -205,21 +204,7 @@ function seedDefaultNoteText(fc: fabric.Canvas) {
   applyTextControlDefaults(nameText);
   registerLayerId(nameText, DEFAULT_NAME_LAYER_ID);
 
-  const bodyText = new fabric.IText("", {
-    left: w * NOTE_TEXT_BODY.left,
-    top: h * NOTE_TEXT_BODY.top,
-    originX: "left",
-    originY: "top",
-    fontFamily: TEXT_FONTS[0].value,
-    fontSize: NOTE_TEXT_DEFAULT_SIZE,
-    fill: NOTE_TEXT_DEFAULT_COLOR,
-    width: w * NOTE_TEXT_BODY.width,
-    lineHeight: 1.3,
-  });
-  applyTextControlDefaults(bodyText);
-  registerLayerId(bodyText, DEFAULT_BODY_LAYER_ID);
-
-  fc.add(nameText, bodyText);
+  fc.add(nameText);
 }
 
 function normalizeTextScale(text: fabric.IText): boolean {

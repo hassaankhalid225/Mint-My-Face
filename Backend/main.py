@@ -1,3 +1,4 @@
+import json
 import os
 import uuid
 from pathlib import Path
@@ -16,6 +17,7 @@ from PIL import Image
 from billing import (
     DAILY_IMAGE_LIMITS,
     PLAN_PRICES_CENTS,
+    apply_paddle_transaction_completed,
     apply_stripe_checkout_completed,
     can_mint,
     create_stripe_checkout_url,
@@ -25,6 +27,7 @@ from billing import (
     register_user,
     set_user_plan,
     user_has_hd,
+    verify_paddle_signature,
 )
 from auth_jwt import TokenUser, get_optional_user
 from watermark import apply_watermark
@@ -205,6 +208,29 @@ async def stripe_webhook(request: Request):
 
     if event["type"] == "checkout.session.completed":
         apply_stripe_checkout_completed(event["data"]["object"])
+
+    return {"received": True}
+
+
+@app.post("/api/billing/paddle/webhook")
+async def paddle_webhook(request: Request):
+    """Paddle webhook — activate plan after transaction.completed."""
+    if not os.getenv("PADDLE_WEBHOOK_SECRET", "").strip():
+        raise HTTPException(status_code=501, detail="PADDLE_WEBHOOK_SECRET not configured")
+
+    payload = await request.body()
+    signature = request.headers.get("paddle-signature", "")
+
+    if not verify_paddle_signature(payload, signature):
+        raise HTTPException(status_code=400, detail="Invalid Paddle signature")
+
+    try:
+        event = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload") from exc
+
+    if event.get("event_type") == "transaction.completed":
+        apply_paddle_transaction_completed(event.get("data") or {})
 
     return {"received": True}
 
